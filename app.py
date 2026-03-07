@@ -544,42 +544,194 @@ tab_upload, tab_about = st.tabs(["⚡  Enhance Audio", "◎  About & Pipeline"])
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab_upload:
 
-    # ── Upload Zone ───────────────────────────────────────────────────────────
+    # ── Input Audio Section ───────────────────────────────────────────────────
     st.markdown("""
     <div class="sec-title">
       <span class="sec-title-text">01 · Input Audio</span>
       <div class="sec-title-line"></div>
     </div>""", unsafe_allow_html=True)
 
+    # ── Mode toggle CSS ───────────────────────────────────────────────────────
     st.markdown("""
-    <div class="upload-zone-wrap">
-      <span class="upload-icon">🎵</span>
-      <div class="upload-text">Drop your audio file here or click to browse</div>
-      <div class="upload-hint">Supports .WAV · .MP3 &nbsp;|&nbsp; Stereo auto-converted to 16 kHz mono</div>
-    </div>""", unsafe_allow_html=True)
+    <style>
+    /* Input mode toggle pills */
+    .input-mode-row {
+        display: flex;
+        gap: 0.6rem;
+        margin-bottom: 1.4rem;
+    }
+    .mode-pill {
+        flex: 1;
+        border-radius: 14px;
+        padding: 1rem 1.2rem;
+        border: 1.5px solid rgba(0,210,255,0.12);
+        background: rgba(0,12,30,0.7);
+        cursor: pointer;
+        transition: all 0.25s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    .mode-pill.active {
+        border-color: rgba(0,210,255,0.45);
+        background: rgba(0,30,60,0.85);
+        box-shadow: 0 0 20px rgba(0,210,255,0.08), inset 0 0 20px rgba(0,210,255,0.04);
+    }
+    .mode-pill::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 2px;
+        background: var(--pill-line, rgba(0,210,255,0.3));
+        border-radius: 14px 14px 0 0;
+        opacity: 0;
+        transition: opacity 0.25s;
+    }
+    .mode-pill.active::before { opacity: 1; }
+    .mode-pill-icon {
+        font-size: 1.6rem;
+        display: block;
+        margin-bottom: 0.4rem;
+    }
+    .mode-pill-title {
+        font-family: 'Rajdhani', sans-serif;
+        font-size: 0.95rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #a0c0e0;
+        margin-bottom: 0.2rem;
+    }
+    .mode-pill.active .mode-pill-title { color: #00d2ff; }
+    .mode-pill-sub {
+        font-size: 0.75rem;
+        color: #3a5a7a;
+        font-family: 'JetBrains Mono', monospace;
+    }
 
-    uploaded_file = st.file_uploader(
-        " ", type=["wav", "mp3"], label_visibility="collapsed"
+    /* Live recording widget styles */
+    .rec-zone {
+        background: linear-gradient(135deg, rgba(255,30,60,0.04), rgba(0,12,30,0.9));
+        border: 1.5px dashed rgba(255,60,80,0.25);
+        border-radius: 20px;
+        padding: 2rem;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+    }
+    .rec-zone::before {
+        content: '';
+        position: absolute;
+        top: 0; left: -100%;
+        width: 60%; height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(255,60,80,0.4), transparent);
+        animation: shimmer-red 3s linear infinite;
+    }
+    @keyframes shimmer-red {
+        0%   { left: -60%; }
+        100% { left: 160%; }
+    }
+    .rec-icon {
+        font-size: 2.8rem;
+        display: block;
+        margin-bottom: 0.5rem;
+        animation: pulse-rec 2s ease-in-out infinite;
+    }
+    @keyframes pulse-rec {
+        0%,100% { transform: scale(1); opacity: 1; }
+        50%      { transform: scale(1.08); opacity: 0.8; }
+    }
+    .rec-label {
+        font-family: 'Rajdhani', sans-serif;
+        font-size: 1rem;
+        font-weight: 600;
+        color: #ff6080;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 0.2rem;
+    }
+    .rec-hint {
+        font-size: 0.75rem;
+        color: #3a5a7a;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Style the streamlit audio_input widget */
+    [data-testid="stAudioInput"] {
+        background: transparent !important;
+    }
+    [data-testid="stAudioInput"] > div {
+        background: transparent !important;
+        border: none !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ── Mode selector via radio (styled as pills) ─────────────────────────────
+    input_mode = st.radio(
+        "input_mode",
+        ["📁  Browse File", "🎙️  Live Recording"],
+        horizontal=True,
+        label_visibility="collapsed",
     )
 
-    # ── Empty state ───────────────────────────────────────────────────────────
-    if uploaded_file is None:
-        st.markdown("""
-        <div class="empty-state">
-          <span class="empty-icon">🎙️</span>
-          <div class="empty-text">Upload a noisy audio file above to begin enhancement</div>
-        </div>""", unsafe_allow_html=True)
-        st.stop()
-
-    # ── Save & process ────────────────────────────────────────────────────────
-    suffix = ".wav" if uploaded_file.name.lower().endswith(".wav") else ".mp3"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(uploaded_file.getbuffer())
-        input_path = tmp.name
-
+    input_path  = None
+    output_path = None
+    input_name  = None
     results_dir = os.path.join(os.path.dirname(__file__), "results")
     os.makedirs(results_dir, exist_ok=True)
-    output_path = os.path.join(results_dir, f"enhanced_{uploaded_file.name.replace('.mp3', '.wav')}")
+
+    # ── MODE 1: File upload ───────────────────────────────────────────────────
+    if input_mode == "📁  Browse File":
+        st.markdown("""
+        <div class="upload-zone-wrap">
+          <span class="upload-icon">🎵</span>
+          <div class="upload-text">Drop your audio file here or click to browse</div>
+          <div class="upload-hint">Supports .WAV · .MP3 &nbsp;|&nbsp; Stereo auto-converted to 16 kHz mono</div>
+        </div>""", unsafe_allow_html=True)
+
+        uploaded_file = st.file_uploader(
+            " ", type=["wav", "mp3"], label_visibility="collapsed"
+        )
+
+        if uploaded_file is None:
+            st.markdown("""
+            <div class="empty-state">
+              <span class="empty-icon">🎙️</span>
+              <div class="empty-text">Upload a noisy audio file above to begin enhancement</div>
+            </div>""", unsafe_allow_html=True)
+            st.stop()
+
+        suffix = ".wav" if uploaded_file.name.lower().endswith(".wav") else ".mp3"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(uploaded_file.getbuffer())
+            input_path = tmp.name
+        input_name  = uploaded_file.name
+        output_path = os.path.join(results_dir, f"enhanced_{input_name.replace('.mp3', '.wav')}")
+
+    # ── MODE 2: Live recording ────────────────────────────────────────────────
+    else:
+        st.markdown("""
+        <div class="rec-zone">
+          <span class="rec-icon">🎙️</span>
+          <div class="rec-label">Live Recording</div>
+          <div class="rec-hint">Click the mic below · Speak · Stop · Enhance</div>
+        </div>""", unsafe_allow_html=True)
+
+        recorded = st.audio_input(" ", label_visibility="collapsed")
+
+        if recorded is None:
+            st.markdown("""
+            <div class="empty-state">
+              <span class="empty-icon">🔴</span>
+              <div class="empty-text">Press the microphone button above to start recording</div>
+            </div>""", unsafe_allow_html=True)
+            st.stop()
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+            tmp.write(recorded.getbuffer())
+            input_path  = tmp.name
+        input_name  = "live_recording.wav"
+        output_path = os.path.join(results_dir, "enhanced_live_recording.wav")
 
     # Animated processing steps
     st.markdown("""
@@ -703,7 +855,7 @@ with tab_upload:
     st.download_button(
         label="⬇  Download Enhanced Audio (.wav)",
         data=enhanced_buf,
-        file_name=f"enhanced_{uploaded_file.name.replace('.mp3','.wav')}",
+        file_name=f"enhanced_{input_name.replace('.mp3','.wav')}",
         mime="audio/wav",
     )
     st.markdown("</div>", unsafe_allow_html=True)

@@ -54,7 +54,7 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-Open your browser at **http://localhost:8501**
+LIVE URL : **https://sonic-real-time-speech-enhancement-system.streamlit.app/**
 
 ---
 
